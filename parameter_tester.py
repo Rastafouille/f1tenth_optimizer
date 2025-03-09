@@ -39,6 +39,9 @@ class ParameterTester:
             }
         }
         
+        # Cache pour éviter les doublons
+        self.tested_combinations = set()
+        
         # Création des plages de valeurs à partir des définitions
         self.parameter_ranges = {
             name: np.arange(
@@ -287,60 +290,94 @@ class ParameterTester:
         # Retourner la moyenne pondérée des scores
         return np.average(scores, weights=weights)
     
+    def parameters_to_key(self, params):
+        """Convertit un dictionnaire de paramètres en une chaîne unique pour le cache"""
+        return "|".join(f"{k}:{v:.3f}" for k, v in sorted(params.items()))
+
+    def is_similar_combination(self, params, threshold=0.01):
+        """Vérifie si une combinaison similaire a déjà été testée"""
+        params_array = self.parameters_to_array(params)
+        for tested_params in self.tested_params:
+            tested_array = self.parameters_to_array(tested_params)
+            if np.allclose(params_array, tested_array, rtol=threshold, atol=threshold):
+                return True
+        return False
+
     def get_next_parameters(self):
         """Génère le prochain jeu de paramètres à tester"""
-        if not self.tested_params:
-            print("Premier test : valeurs moyennes")
-            return {name: np.mean(values) for name, values in self.parameter_ranges.items()}
+        max_attempts = 50  # Nombre maximum de tentatives pour trouver des paramètres uniques
         
-        # Si on a assez de données et qu'on n'utilise pas encore Nelder-Mead
-        if len(self.tested_params) >= 10 and not self.using_nelder_mead:
-            print("\nInitialisation de Nelder-Mead avec les meilleurs paramètres trouvés")
-            self.initialize_nelder_mead()
-        
-        # Si on utilise Nelder-Mead
-        if self.using_nelder_mead and self.nelder_mead_result is not None:
-            # Afficher l'état de l'optimisation
-            print("\n--- État de l'optimisation Nelder-Mead ---")
-            if hasattr(self.nelder_mead_result, 'nit'):
-                print(f"Nombre d'itérations: {self.nelder_mead_result.nit}")
-            if hasattr(self.nelder_mead_result, 'fun'):
-                print(f"Meilleur score trouvé: {-self.nelder_mead_result.fun:.2f}")
-            
-            # Alterner entre exploration et exploitation
-            if np.random.random() < 0.8:  # 80% du temps, utiliser Nelder-Mead
-                x = self.nelder_mead_result.x
-                # Ajouter un bruit adaptatif basé sur la performance
-                noise_scale = 0.1 * (1.0 - min(1.0, self.best_score / 1000))
-                noise = np.random.normal(0, noise_scale, size=len(x))
-                x = x + noise
-                print("Mode: Exploitation Nelder-Mead (avec bruit adaptatif)")
-                print(f"Échelle du bruit: {noise_scale:.3f}")
-                return self.array_to_parameters(x)
+        for _ in range(max_attempts):
+            if not self.tested_params:
+                print("Premier test : valeurs moyennes")
+                params = {name: np.mean(values) for name, values in self.parameter_ranges.items()}
             else:
-                print("Mode: Exploration aléatoire (20% des tests)")
+                # Si on a assez de données et qu'on n'utilise pas encore Nelder-Mead
+                if len(self.tested_params) >= 10 and not self.using_nelder_mead:
+                    print("\nInitialisation de Nelder-Mead avec les meilleurs paramètres trouvés")
+                    self.initialize_nelder_mead()
+                
+                # Si on utilise Nelder-Mead
+                if self.using_nelder_mead and self.nelder_mead_result is not None:
+                    # Afficher l'état de l'optimisation
+                    print("\n--- État de l'optimisation Nelder-Mead ---")
+                    if hasattr(self.nelder_mead_result, 'nit'):
+                        print(f"Nombre d'itérations: {self.nelder_mead_result.nit}")
+                    if hasattr(self.nelder_mead_result, 'fun'):
+                        print(f"Meilleur score trouvé: {-self.nelder_mead_result.fun:.2f}")
+                    
+                    # Alterner entre exploration et exploitation
+                    if np.random.random() < 0.8:  # 80% du temps, utiliser Nelder-Mead
+                        x = self.nelder_mead_result.x
+                        # Ajouter un bruit adaptatif basé sur la performance
+                        noise_scale = 0.1 * (1.0 - min(1.0, self.best_score / 10000))
+                        noise = np.random.normal(0, noise_scale, size=len(x))
+                        x = x + noise
+                        print("Mode: Exploitation Nelder-Mead (avec bruit adaptatif)")
+                        print(f"Échelle du bruit: {noise_scale:.3f}")
+                        params = self.array_to_parameters(x)
+                    else:
+                        print("Mode: Exploration aléatoire (20% des tests)")
+                        params = self.get_random_parameters()
+                else:
+                    # Sinon, utiliser une exploration plus large
+                    if self.best_score > 0:
+                        print("\nMode: Exploration large autour des meilleurs paramètres")
+                        print(f"Score de référence: {self.best_score:.2f}")
+                        params = self.get_random_parameters_around_best()
+                    else:
+                        print("\nMode: Exploration aléatoire complète")
+                        params = self.get_random_parameters()
+            
+            # Vérifier si ces paramètres ou des paramètres similaires ont déjà été testés
+            if not self.is_similar_combination(params):
+                return params
+            
+            print("Paramètres similaires déjà testés, nouvelle tentative...")
         
-        # Sinon, utiliser une exploration plus large
-        if self.best_score > 0:
-            # Variation aléatoire autour des meilleurs paramètres
-            new_params = {}
-            print("\nMode: Exploration large autour des meilleurs paramètres")
-            print(f"Score de référence: {self.best_score:.2f}")
-            for name, value in self.best_params.items():
-                range_min = min(self.parameter_ranges[name])
-                range_max = max(self.parameter_ranges[name])
-                # Variation plus importante (30%) pour l'exploration
-                variation = (range_max - range_min) * 0.3
-                new_value = value + np.random.uniform(-variation, variation)
-                new_params[name] = np.clip(new_value, range_min, range_max)
-            return new_params
-        
-        print("\nMode: Exploration aléatoire complète")
-        # Si rien d'autre ne fonctionne, essayer des paramètres aléatoires
+        print("Warning: Impossible de trouver des paramètres uniques après plusieurs tentatives")
+        return self.get_random_parameters()  # Retourner des paramètres aléatoires en dernier recours
+
+    def get_random_parameters(self):
+        """Génère des paramètres aléatoires"""
         return {
-            name: np.random.choice(values) 
-            for name, values in self.parameter_ranges.items()
+            name: np.random.uniform(
+                self.parameter_definitions[name]['min'],
+                self.parameter_definitions[name]['max']
+            )
+            for name in self.parameter_definitions
         }
+
+    def get_random_parameters_around_best(self):
+        """Génère des paramètres aléatoires autour des meilleurs paramètres"""
+        new_params = {}
+        for name, value in self.best_params.items():
+            range_min = self.parameter_definitions[name]['min']
+            range_max = self.parameter_definitions[name]['max']
+            variation = (range_max - range_min) * 0.3
+            new_value = value + np.random.uniform(-variation, variation)
+            new_params[name] = np.clip(new_value, range_min, range_max)
+        return new_params
     
     def get_total_combinations(self):
         """Calcule le nombre total de combinaisons possibles"""

@@ -1,6 +1,31 @@
-# F1TENTH Optimisation des Paramètres
+# F1TENTH Optimization
 
-Ce projet implémente un système d'optimisation des paramètres de contrôle pour un véhicule F1TENTH en utilisant l'algorithme Nelder-Mead et une exploration adaptative.
+Ce projet implémente un système d'optimisation des paramètres pour un véhicule F1TENTH utilisant l'algorithme Nelder-Mead et une exploration adaptative.
+
+## Interfaces
+
+### Interface de Simulation
+La fenêtre principale de simulation montre la vue de dessus du circuit et le véhicule :
+
+![Interface de simulation](docs/display.png)
+
+### Interface de Télémétrie
+L'interface de télémétrie affiche en temps réel les informations du véhicule :
+
+![Interface de télémétrie](docs/telemetry.png)
+
+- **État du Véhicule** (panneau gauche) :
+  - Vitesse et direction avec barres de progression
+  - Temps au tour actuel
+  - Meilleur temps au tour
+  - Nombre de tours complétés
+
+- **Scan LIDAR** (panneau droit) :
+  - Visualisation en temps réel des données LIDAR
+  - Grille de référence avec distances
+  - Position du véhicule au centre
+
+Les deux interfaces fonctionnent en parallèle pendant l'optimisation, permettant de suivre à la fois la position du véhicule sur le circuit et ses données en temps réel.
 
 ## Modes de Fonctionnement
 

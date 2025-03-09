@@ -11,144 +11,151 @@ from parameter_tester import ParameterTester
 class InfoDisplay:
     def __init__(self):
         pygame.init()
-        # Agrandir la fenêtre pour accueillir la visualisation du scan et les temps au tour
-        self.screen = pygame.display.set_mode((800, 400))  # Augmenter la largeur pour les temps au tour
-        pygame.display.set_caption("Info F1TENTH")
+        # Couleurs modernes
+        self.COLORS = {
+            'background': (40, 44, 52),      # Fond sombre
+            'panel': (30, 33, 39),           # Panneaux plus sombres
+            'text': (220, 223, 228),         # Texte clair
+            'highlight': (97, 175, 239),     # Bleu clair pour les valeurs importantes
+            'warning': (224, 108, 117),      # Rouge pour les alertes
+            'success': (152, 195, 121),      # Vert pour les succès
+            'separator': (55, 59, 69)        # Lignes de séparation
+        }
         
-        # Positionner la fenêtre à droite de la fenêtre du simulateur
-        # La fenêtre du simulateur fait environ 800x800 pixels
-        os.environ['SDL_VIDEO_WINDOW_POS'] = "820,100"  # Position x=820 (800 + 20 de marge), y=100
+        # Configuration de la fenêtre
+        self.screen = pygame.display.set_mode((1000, 500))
+        pygame.display.set_caption("F1TENTH Telemetry")
+        os.environ['SDL_VIDEO_WINDOW_POS'] = "820,100"
         
-        self.font = pygame.font.Font(None, 36)
-        self.small_font = pygame.font.Font(None, 24)  # Police plus petite pour la liste des temps
+        # Chargement des polices
+        try:
+            self.title_font = pygame.font.SysFont('Arial', 36, bold=True)
+            self.main_font = pygame.font.SysFont('Arial', 28)
+            self.small_font = pygame.font.SysFont('Arial', 20)
+        except:
+            self.title_font = pygame.font.Font(None, 36)
+            self.main_font = pygame.font.Font(None, 28)
+            self.small_font = pygame.font.Font(None, 20)
         
-        # Zone pour le scan laser (carré de 200x200 pixels)
-        self.scan_surface = pygame.Surface((200, 200))
-        self.scan_center = (100, 100)  # Centre du scan
-        self.scan_scale = 20  # Échelle ajustée pour une meilleure visualisation
-        self.fov = None  # Sera initialisé avec la première observation
+        # Zone pour le scan laser (300x300 pixels)
+        self.scan_surface = pygame.Surface((300, 300))
+        self.scan_center = (150, 150)
+        self.scan_scale = 30
+        self.fov = None
         
         # Variables pour le suivi des tours
-        self.lap_times_history = []  # Liste des temps au tour
-        self.current_lap_count = 0  # Pour détecter les nouveaux tours
-        self.best_lap_time = float('inf')  # Meilleur temps au tour
+        self.lap_times_history = []
+        self.current_lap_count = 0
+        self.best_lap_time = float('inf')
+
+    def draw_panel(self, surface, rect, title=None):
+        """Dessine un panneau avec titre et bordure"""
+        pygame.draw.rect(surface, self.COLORS['panel'], rect)
+        pygame.draw.rect(surface, self.COLORS['separator'], rect, 1)
+        if title:
+            title_surf = self.title_font.render(title, True, self.COLORS['highlight'])
+            surface.blit(title_surf, (rect[0] + 10, rect[1] + 5))
 
     def draw_scan(self, scan_data, obs):
-        """
-        Dessine les données du scan laser
-        """
-        self.scan_surface.fill((0, 0, 0))  # Fond noir
+        """Dessine les données du scan laser avec un style amélioré"""
+        self.scan_surface.fill(self.COLORS['panel'])
         
         if scan_data is not None and len(scan_data) > 0:
-            # Initialiser le FOV si pas encore fait
             if self.fov is None and 'lidar_param' in obs:
-                self.fov = obs['lidar_param'][1]  # Récupérer le FOV depuis les paramètres du lidar
-            
-            # Si FOV disponible, utiliser sa valeur, sinon utiliser la valeur par défaut
+                self.fov = obs['lidar_param'][1]
             half_fov = self.fov / 2 if self.fov is not None else 2.356194490192345
-            
-            # Convertir les distances en coordonnées x,y
             angles = np.linspace(-half_fov, half_fov, len(scan_data))
             
+            # Grille de fond
+            for i in range(0, 301, 50):
+                pygame.draw.circle(self.scan_surface, self.COLORS['separator'], self.scan_center, i, 1)
+            pygame.draw.line(self.scan_surface, self.COLORS['separator'], 
+                           (0, self.scan_center[1]), (300, self.scan_center[1]), 1)
+            pygame.draw.line(self.scan_surface, self.COLORS['separator'], 
+                           (self.scan_center[0], 0), (self.scan_center[0], 300), 1)
+            
+            # Points du scan
             for i, distance in enumerate(scan_data):
-                if not np.isinf(distance) and distance < 10:  # Limite de distance réduite à 10m
-                    # Convertir coordonnées polaires en cartésiennes
+                if not np.isinf(distance) and distance < 10:
                     x = distance * np.cos(angles[i])
                     y = distance * np.sin(angles[i])
-                    
-                    # Mettre à l'échelle et décaler au centre
                     screen_x = int(self.scan_center[0] + x * self.scan_scale)
-                    screen_y = int(self.scan_center[1] - y * self.scan_scale)  # Inverser y pour l'affichage
-                    
-                    # Vérifier que le point est dans les limites
-                    if 0 <= screen_x < 200 and 0 <= screen_y < 200:
-                        pygame.draw.circle(self.scan_surface, (0, 255, 0), (screen_x, screen_y), 1)
+                    screen_y = int(self.scan_center[1] - y * self.scan_scale)
+                    if 0 <= screen_x < 300 and 0 <= screen_y < 300:
+                        pygame.draw.circle(self.scan_surface, self.COLORS['highlight'], 
+                                        (screen_x, screen_y), 2)
         
-        # Dessiner le robot au centre
-        pygame.draw.circle(self.scan_surface, (255, 0, 0), self.scan_center, 3)
-        
-        # Dessiner les axes avec des couleurs différentes
-        pygame.draw.line(self.scan_surface, (100, 100, 255), 
-                        (self.scan_center[0], 0), 
-                        (self.scan_center[0], 200), 1)  # Axe vertical en bleu
-        pygame.draw.line(self.scan_surface, (255, 100, 100), 
-                        (0, self.scan_center[1]), 
-                        (200, self.scan_center[1]), 1)  # Axe horizontal en rouge
+        # Robot au centre
+        pygame.draw.circle(self.scan_surface, self.COLORS['success'], self.scan_center, 5)
 
     def update(self, speed, steer, obs):
-        """
-        Met à jour l'affichage des informations avec des observations simplifiées
-        """
-        # Vérifier collision (les collisions sont dans une liste)
+        """Met à jour l'affichage avec un design moderne"""
+        # Fond principal
+        self.screen.fill(self.COLORS['background'])
+        
+        # Vérifier collision
         is_colliding = False
         if obs['collisions'] is not None and len(obs['collisions']) > 0:
             is_colliding = bool(obs['collisions'][0])
         
-        # Couleur de fond basée sur l'état de collision
-        if is_colliding:
-            self.screen.fill((100, 0, 0))  # Rouge foncé pour collision
-        else:
-            self.screen.fill((50, 50, 50))  # Gris foncé normal
-        
-        # Créer et afficher les textes
-        y_offset = 20
-        line_spacing = 30
+        # Panneau principal (gauche)
+        main_panel = pygame.Rect(20, 20, 460, 460)
+        self.draw_panel(self.screen, main_panel, "État du Véhicule")
         
         # Informations de contrôle
-        steer_text = self.font.render(f"Direction: {steer:.2f} rad", True, (0, 255, 0))
-        speed_text = self.font.render(f"Vitesse: {speed:.2f} m/s", True, (0, 255, 0))
+        y_offset = 70
+        line_spacing = 40
         
-        # Informations de performance
+        # Vitesse et direction avec des barres de progression
+        speed_text = self.main_font.render(f"Vitesse: {speed:.2f} m/s", True, self.COLORS['text'])
+        steer_text = self.main_font.render(f"Direction: {steer:.2f} rad", True, self.COLORS['text'])
+        self.screen.blit(speed_text, (40, y_offset))
+        self.screen.blit(steer_text, (40, y_offset + line_spacing))
+        
+        # Barres de progression
+        speed_bar_rect = pygame.Rect(40, y_offset + 30, 400 * (speed/3.0), 5)
+        steer_bar_rect = pygame.Rect(40, y_offset + line_spacing + 30, 400 * (abs(steer)/0.4), 5)
+        pygame.draw.rect(self.screen, self.COLORS['highlight'], speed_bar_rect)
+        pygame.draw.rect(self.screen, self.COLORS['highlight'], steer_bar_rect)
+        
+        # Informations de tour
+        y_offset += 3 * line_spacing
         lap_time = obs['lap_times'][0] if 'lap_times' in obs and len(obs['lap_times']) > 0 else 0.0
         lap_count = int(obs['lap_counts'][0]) if 'lap_counts' in obs and len(obs['lap_counts']) > 0 else 0
         
-        # Vérifier si un nouveau tour a été complété
         if lap_count > self.current_lap_count:
-            # Sauvegarder le temps du tour précédent
-            if self.current_lap_count > 0:  # Ne pas sauvegarder le temps du premier tour incomplet
+            if self.current_lap_count > 0:
                 self.lap_times_history.append(lap_time)
                 if lap_time < self.best_lap_time:
                     self.best_lap_time = lap_time
             self.current_lap_count = lap_count
         
-        # Afficher les informations de tour actuelles
-        lap_time_text = self.font.render(f"Temps tour actuel: {lap_time:.2f} s", True, (255, 255, 0))
-        lap_count_text = self.font.render(f"Tour: {lap_count}", True, (255, 255, 0))
+        # Affichage des temps
+        lap_time_text = self.main_font.render(f"Temps tour: {lap_time:.2f} s", True, self.COLORS['text'])
+        lap_count_text = self.main_font.render(f"Tour: {lap_count}", True, self.COLORS['text'])
+        self.screen.blit(lap_time_text, (40, y_offset))
+        self.screen.blit(lap_count_text, (40, y_offset + line_spacing))
         
         if self.best_lap_time < float('inf'):
-            best_time_text = self.font.render(f"Meilleur tour: {self.best_lap_time:.2f} s", True, (255, 215, 0))
+            best_time_text = self.main_font.render(f"Meilleur tour: {self.best_lap_time:.2f} s", 
+                                                 True, self.COLORS['success'])
+            self.screen.blit(best_time_text, (40, y_offset + 2 * line_spacing))
         
-        # Afficher warning si collision
-        if is_colliding:
-            warning_text = self.font.render("! COLLISION !", True, (255, 0, 0))
-            self.screen.blit(warning_text, (80, 90))
+        # Panneau de scan (droite)
+        scan_panel = pygame.Rect(500, 20, 480, 460)
+        self.draw_panel(self.screen, scan_panel, "Scan LIDAR")
         
-        # Positionner les textes principaux
-        self.screen.blit(steer_text, (20, y_offset))
-        self.screen.blit(speed_text, (20, y_offset + line_spacing))
-        self.screen.blit(lap_time_text, (20, y_offset + 2 * line_spacing))
-        self.screen.blit(lap_count_text, (20, y_offset + 3 * line_spacing))
-        if self.best_lap_time < float('inf'):
-            self.screen.blit(best_time_text, (20, y_offset + 4 * line_spacing))
-        
-        # Afficher l'historique des temps au tour
-        if self.lap_times_history:
-            history_title = self.font.render("Historique des tours:", True, (200, 200, 200))
-            self.screen.blit(history_title, (500, y_offset))
-            
-            for i, time in enumerate(self.lap_times_history):
-                color = (255, 215, 0) if time == self.best_lap_time else (200, 200, 200)
-                lap_text = self.small_font.render(f"Tour {i+1}: {time:.2f} s", True, color)
-                self.screen.blit(lap_text, (500, y_offset + 40 + i * 25))
-        
-        # Dessiner le scan laser s'il est disponible
+        # Mise à jour et affichage du scan
         if 'scans' in obs and obs['scans'] is not None and len(obs['scans']) > 0:
             self.draw_scan(obs['scans'][0], obs)
+        self.screen.blit(self.scan_surface, (590, 100))
         
-        # Afficher la surface du scan
-        self.screen.blit(self.scan_surface, (280, 20))
+        # Affichage des alertes
+        if is_colliding:
+            warning_text = self.title_font.render("! COLLISION !", True, self.COLORS['warning'])
+            text_rect = warning_text.get_rect(center=(250, 400))
+            self.screen.blit(warning_text, text_rect)
         
-        # Mettre à jour l'affichage
         pygame.display.flip()
 
     def __del__(self):

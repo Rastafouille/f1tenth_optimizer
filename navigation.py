@@ -183,7 +183,7 @@ class SimpleAutonomousController:
         if front_dist > self.min_front_dist + self.safety_margin:
             # Centrage entre les obstacles
             if abs(left_dist - right_dist) > self.safety_margin:
-                steer = - 0.2 * np.sign(left_dist - right_dist)
+                steer = - self.max_steer * np.sign(left_dist - right_dist)
                 self.decision_msg = f"Correction de centrage: {steer:.2f} rad"
                 return steer
             self.decision_msg = "Continuer tout droit"
