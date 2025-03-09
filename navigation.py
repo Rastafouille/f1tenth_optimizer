@@ -138,9 +138,9 @@ class SimpleAutonomousController:
             "╚══════════════════════════════════════════════════════╝"
         ]
         
-        for line in lines:
-            self.clear_line()
-            print(line)
+        #for line in lines:
+        #    self.clear_line()
+        #    print(line)
         
     def process_lidar(self, scan_data):
         """Traite les données LIDAR pour détecter les obstacles"""

@@ -1,6 +1,150 @@
-# F1TENTH Teleoperation Visualizer
+# F1TENTH Optimisation des Paramètres
 
-Ce projet implémente une interface de téléopération pour le simulateur F1TENTH avec visualisation en temps réel des données LIDAR. Il permet de contrôler manuellement un véhicule F1TENTH dans un environnement simulé tout en visualisant les retours des capteurs et l'état du véhicule.
+Ce projet implémente un système d'optimisation des paramètres de contrôle pour un véhicule F1TENTH en utilisant l'algorithme Nelder-Mead et une exploration adaptative.
+
+## Modes de Fonctionnement
+
+### 1. Mode Optimisation Automatique
+Le mode principal qui optimise les paramètres du contrôleur autonome.
+
+### 2. Mode Téléopération
+Pour basculer en téléopération manuelle :
+```python
+# Dans main.py, modifier la ligne :
+controller = SimpleAutonomousController(**params)
+# Par :
+controller = TeleoperationController()
+```
+
+Contrôles en téléopération :
+- Flèches Haut/Bas : Accélération/Freinage
+- Flèches Gauche/Droite : Direction
+- 'R' : Reset de la position
+- 'Échap' : Quitter
+
+## Algorithme de Navigation
+
+Le contrôleur autonome (`SimpleAutonomousController`) utilise une approche basée sur les capteurs LIDAR avec les composants suivants :
+
+### 1. Détection d'Obstacles
+```python
+{
+    'front_angle': angle de détection avant,
+    'side_angle': angle de détection latérale,
+    'min_front_dist': distance minimale avant,
+    'safety_margin': marge de sécurité
+}
+```
+
+### 2. Logique de Contrôle
+- Détection de la direction optimale basée sur les données LIDAR
+- Ajustement dynamique de la vitesse selon la courbure
+- Évitement d'obstacles avec marges de sécurité adaptatives
+- Gestion des virages avec ralentissement automatique
+
+### 3. Paramètres Optimisés
+Les six paramètres clés qui influencent le comportement :
+- `max_speed` : Vitesse maximale en ligne droite
+- `max_steer` : Angle de braquage maximum
+- `min_front_dist` : Distance minimale de sécurité avant
+- `safety_margin` : Marge de sécurité générale
+- `front_angle` : Angle de détection avant
+- `side_angle` : Angle de détection latérale
+
+## Structure du Projet
+
+- `main.py` : Script principal avec la simulation et l'interface graphique
+- `parameter_tester.py` : Système d'optimisation des paramètres
+- `navigation.py` : Contrôleur autonome du véhicule
+
+## Système d'Optimisation
+
+### Paramètres Optimisés
+
+```python
+{
+    'max_speed': 1.0 à 3.0 m/s,
+    'max_steer': 0.05 à 0.2 rad,
+    'min_front_dist': 0.1 à 1.0 m,
+    'safety_margin': 0.2 à 0.4 m,
+    'front_angle': 10 à 45 degrés,
+    'side_angle': 10 à 110 degrés
+}
+```
+
+### Algorithme d'Optimisation
+
+1. **Phase Initiale** :
+   - Démarrage avec les valeurs moyennes
+   - Collecte de données pour 10 premiers tests
+
+2. **Optimisation Nelder-Mead** :
+   - Activation après 10 tests
+   - Utilisation d'un simplexe initial adaptatif (10% de la plage des paramètres)
+   - 200 itérations maximum
+   - 300 évaluations maximum
+
+3. **Stratégie d'Exploration** :
+   - 80% Exploitation (Nelder-Mead avec bruit adaptatif)
+   - 20% Exploration aléatoire
+
+### Système de Score
+
+Le score est calculé selon les critères suivants :
+
+1. **Collision** : -1000 points
+2. **Tour Non Complété** : -1000 points + distance parcourue
+3. **Tour Complété** : 10000 points - (temps × 10)
+
+Cette échelle assure que :
+- Un tour complet est toujours mieux qu'un tour incomplet
+- Les collisions sont fortement pénalisées
+- La vitesse est récompensée pour les tours complets
+
+### Affichage en Temps Réel
+
+L'interface affiche :
+- État de l'optimisation Nelder-Mead
+- Nombre d'itérations
+- Meilleur score trouvé
+- Mode actuel (exploitation/exploration)
+- Échelle du bruit adaptatif
+
+### Sauvegarde des Résultats
+
+Les résultats sont sauvegardés dans un fichier CSV avec :
+- Paramètres testés
+- Temps total
+- Distance parcourue
+- État de collision
+- Complétion du tour
+- Temps au tour
+- Score final
+
+## Utilisation
+
+Pour lancer l'optimisation :
+```bash
+python main.py
+```
+
+L'optimisation peut être interrompue à tout moment avec Ctrl+C, affichant les meilleurs paramètres trouvés.
+
+## Visualisation
+
+L'interface graphique montre :
+- Scan laser en temps réel
+- Vitesse et direction actuelles
+- Temps au tour
+- Historique des temps
+- État des collisions
+
+## Notes Techniques
+
+- Intégrateur RK4 utilisé pour la simulation
+- Bruit adaptatif basé sur la performance
+- Simplexe initial personnalisé pour Nelder-Mead
+- Exploration guidée par les meilleurs résultats
 
 # Configuration de l'environnement F1TENTH Gym
 
@@ -41,7 +185,7 @@ Ce guide détaille les étapes pour configurer correctement l'environnement de s
    cd f1tenth_gym
    
    # Installer en mode développement
-   pip install -e .
+   pip install -e . --> si marche pas
    ```
 
 ## Vérification de l'installation
@@ -54,37 +198,3 @@ Pour vérifier que tout fonctionne correctement :
    python waypoint_follow.py
    ```
    Une fenêtre devrait s'ouvrir montrant la simulation.
-
-## Description du Projet
-
-### Fonctionnalités
-- Interface de téléopération avec visualisation LIDAR en temps réel
-- Affichage des paramètres du véhicule (vitesse, direction)
-- Détection des collisions
-- Visualisation du scan laser avec FOV 270° et 1080 points
-- Interface graphique optimisée avec PyGame
-
-### Contrôles
-- Flèches Haut/Bas : Accélération/Freinage
-- Flèches Gauche/Droite : Direction
-- 'R' : Reset de la position
-- 'Échap' : Quitter
-
-### Caractéristiques Techniques
-- Fenêtre principale : 500x400 pixels
-- Zone de scan : 200x200 pixels
-- Échelle de visualisation : 40 pixels/mètre
-- Limite de détection : 10 mètres
-- Intégration RK4 pour la simulation physique
-- FOV du LIDAR automatiquement détecté
-
-### Structure du Projet
-```
-f1tenth_optimizer/
-├── main.py              # Programme principal
-├── navigation.py        # Classe de téléopération
-├── maps/               # Dossier des cartes
-│   └── example_map.png
-└── README.md
-```
-

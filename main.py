@@ -4,6 +4,9 @@ from navigation import SimpleAutonomousController
 import pygame
 import os
 from f110_gym.envs.base_classes import Integrator  # Ajout de l'import pour RK4
+import csv
+from datetime import datetime
+from parameter_tester import ParameterTester
 
 class InfoDisplay:
     def __init__(self):
@@ -22,7 +25,7 @@ class InfoDisplay:
         # Zone pour le scan laser (carré de 200x200 pixels)
         self.scan_surface = pygame.Surface((200, 200))
         self.scan_center = (100, 100)  # Centre du scan
-        self.scan_scale = 40  # Échelle ajustée pour une meilleure visualisation
+        self.scan_scale = 20  # Échelle ajustée pour une meilleure visualisation
         self.fov = None  # Sera initialisé avec la première observation
         
         # Variables pour le suivi des tours
@@ -151,9 +154,88 @@ class InfoDisplay:
     def __del__(self):
         pygame.quit()
 
+def test_parameters(env, initial_pose, params, display=None):
+    """Teste un jeu de paramètres spécifique sur un seul tour"""
+    # Initialisation du contrôleur avec les paramètres
+    controller = SimpleAutonomousController(**params)
+    
+    # Réinitialisation de l'environnement
+    obs_tuple = env.reset(initial_pose)
+    obs = obs_tuple[0] if isinstance(obs_tuple, tuple) else obs_tuple
+    
+    # Variables de suivi
+    total_time = 0.0
+    collision = False
+    tour_complete = False
+    temps_tour = 0.0
+    distance_parcourue = 0.0
+    
+    # Variables pour détecter l'immobilité
+    derniere_position = (obs['poses_x'][0], obs['poses_y'][0])
+    temps_immobile = 0.0
+    seuil_mouvement = 0.01  # 1cm de déplacement minimum
+    
+    # Pas de temps fixe
+    dt = 0.01
+    
+    while True:
+        # Obtenir les actions du contrôleur
+        actions = controller.plan(obs)
+        
+        # Faire un pas de simulation
+        obs_tuple, _, done, _ = env.step(actions)
+        obs = obs_tuple[0] if isinstance(obs_tuple, tuple) else obs_tuple
+        
+        # Vérifier si le véhicule est immobile
+        position_actuelle = (obs['poses_x'][0], obs['poses_y'][0])
+        deplacement = np.sqrt((position_actuelle[0] - derniere_position[0])**2 + 
+                            (position_actuelle[1] - derniere_position[1])**2)
+        
+        if deplacement < seuil_mouvement:
+            temps_immobile += dt
+        else:
+            temps_immobile = 0.0
+            derniere_position = position_actuelle
+        
+        # Arrêter si immobile depuis 5 secondes
+        if temps_immobile >= 5.0:
+            break
+        
+        # Mettre à jour les métriques
+        total_time += dt
+        speed = actions[0][1]  # Vitesse actuelle
+        distance_parcourue += speed * dt
+        
+        # Mettre à jour l'affichage si disponible
+        if display is not None:
+            display.update(actions[0][1], actions[0][0], obs)
+            env.render(mode='human_fast')
+        
+        # Vérifier si le tour est complet
+        if int(obs['lap_counts'][0]) > 0:
+            tour_complete = True
+            temps_tour = total_time
+            break
+        
+        # Vérifier collision
+        if done:
+            collision = bool(obs['collisions'][0])
+            break
+        
+        # Limite de temps de sécurité (30 secondes)
+        if total_time > 120.0:
+            break
+    
+    return {
+        'collision': collision,
+        'total_time': total_time,
+        'distance': distance_parcourue,
+        'tour_complete': tour_complete,
+        'temps_tour': temps_tour,
+        'immobile': temps_immobile >= 5.0
+    }
+
 def main():
-    
-    
     # Création de l'environnement
     map_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'maps', 'example_map')
     racecar_env = gym.make('f110_gym:f110-v0',
@@ -164,49 +246,76 @@ def main():
     # Position initiale
     initial_pose = np.array([[0.7, 0.0, 1.37079632679]], dtype=np.float64)
     
-    # Initialisation
-    obs = racecar_env.reset(initial_pose)
-    controller = SimpleAutonomousController(# Paramètres de contrôle
-                 max_speed=3.0,           # m/s
-                 max_steer=2.0,           # rad
-                 min_front_dist=0.5,      # distance minimale frontale (m)
-                 safety_margin=0.3,       # marge de sécurité (m)
-                 
-                 # Paramètres du scan
-                 front_angle=30,          # demi-angle du secteur frontal (degrés)
-                 side_angle=90)          # demi-angle des secteurs latéraux (degrés)
-                 
+    # Initialisation de l'affichage
     display = InfoDisplay()
     
     try:
-        while True:
-            # Obtenir les actions du contrôleur
-            actions = controller.plan(obs)
+        # Création du testeur de paramètres
+        tester = ParameterTester()
+        max_tests = tester.get_total_combinations()
+        nb_tests_precedents = len(tester.tested_params)
+        print(f"Début de l'optimisation - {max_tests} tests prévus")
+        print(f"Tests déjà effectués: {nb_tests_precedents}")
+        print("-" * 50)
+        
+        # Test de chaque combinaison de paramètres
+        tested = nb_tests_precedents
+        while tested < max_tests:
+            # Obtenir les prochains paramètres à tester
+            params = tester.get_next_parameters()
             
-            # Quitter si demandé
-            if actions is None:
-                break
-                
-            # Faire un pas de simulation
-            obs, step_reward, done, info = racecar_env.step(actions)
-            print(obs)
+            # Afficher les paramètres avant le test
+            print(f"\nTest {tested + 1}/{max_tests}")
+            print("Paramètres testés:")
+            for name, value in params.items():
+                print(f"  {name}: {value:.3f}")
             
-            # Extraire vitesse et angle de braquage des actions
-            speed = actions[0][0]  # Vitesse
-            steer = actions[0][1]  # Angle de braquage
+            # Test des paramètres avec affichage
+            results = test_parameters(racecar_env, initial_pose, params, display)
             
-            # Mettre à jour l'affichage
-            display.update(speed, steer, obs)
+            # Afficher les résultats
+            print("\nRésultats:")
+            if results['collision']:
+                print("  Collision détectée")
+            elif results['immobile']:
+                print("  Véhicule immobile pendant 5 secondes")
+            elif results['tour_complete']:
+                print(f"  Tour complet en {results['temps_tour']:.2f} secondes")
+            else:
+                print("  Tour incomplet")
+            print(f"  Distance parcourue: {results['distance']:.2f}m")
+            print(f"  Temps total: {results['total_time']:.2f}s")
+            print("-" * 50)
             
-            # Rendu de l'environnement
-            racecar_env.render(mode='human')
+            # Enregistrement des résultats
+            tester.save_results(
+                params=params,
+                total_time=results['total_time'],
+                distance=results['distance'],
+                collision=results['collision'],
+                tour_complete=results['tour_complete'],
+                temps_tour=results['temps_tour']
+            )
             
-            # En cas de collision, réinitialiser la position
-            if done:
-                obs = racecar_env.reset(initial_pose)
+            tested += 1
+        
+        # Une fois tous les tests terminés, afficher les meilleurs paramètres
+        if tester.best_params is not None:
+            print("\n\nMeilleurs paramètres trouvés:")
+            for name, value in tester.best_params.items():
+                print(f"  {name}: {value:.3f}")
+            print(f"Score: {tester.best_score:.2f}")
+            
+            print("\nTest des meilleurs paramètres...")
+            results = test_parameters(racecar_env, initial_pose, tester.best_params, display)
             
     except KeyboardInterrupt:
-        print("\nSimulation interrompue par l'utilisateur")
+        print("\nTests interrompus par l'utilisateur")
+        if tester.best_params is not None:
+            print("\nMeilleurs paramètres trouvés jusqu'ici:")
+            for name, value in tester.best_params.items():
+                print(f"  {name}: {value:.3f}")
+            print(f"Score: {tester.best_score:.2f}")
     finally:
         racecar_env.close()
 
