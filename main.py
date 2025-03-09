@@ -1,6 +1,6 @@
 import gym
 import numpy as np
-from navigation import Teleoperation
+from navigation import SimpleAutonomousController
 import pygame
 import os
 from f110_gym.envs.base_classes import Integrator  # Ajout de l'import pour RK4
@@ -8,16 +8,27 @@ from f110_gym.envs.base_classes import Integrator  # Ajout de l'import pour RK4
 class InfoDisplay:
     def __init__(self):
         pygame.init()
-        # Agrandir la fenêtre pour accueillir la visualisation du scan
-        self.screen = pygame.display.set_mode((500, 400))
+        # Agrandir la fenêtre pour accueillir la visualisation du scan et les temps au tour
+        self.screen = pygame.display.set_mode((800, 400))  # Augmenter la largeur pour les temps au tour
         pygame.display.set_caption("Info F1TENTH")
+        
+        # Positionner la fenêtre à droite de la fenêtre du simulateur
+        # La fenêtre du simulateur fait environ 800x800 pixels
+        os.environ['SDL_VIDEO_WINDOW_POS'] = "820,100"  # Position x=820 (800 + 20 de marge), y=100
+        
         self.font = pygame.font.Font(None, 36)
+        self.small_font = pygame.font.Font(None, 24)  # Police plus petite pour la liste des temps
         
         # Zone pour le scan laser (carré de 200x200 pixels)
         self.scan_surface = pygame.Surface((200, 200))
         self.scan_center = (100, 100)  # Centre du scan
         self.scan_scale = 40  # Échelle ajustée pour une meilleure visualisation
         self.fov = None  # Sera initialisé avec la première observation
+        
+        # Variables pour le suivi des tours
+        self.lap_times_history = []  # Liste des temps au tour
+        self.current_lap_count = 0  # Pour détecter les nouveaux tours
+        self.best_lap_time = float('inf')  # Meilleur temps au tour
 
     def draw_scan(self, scan_data, obs):
         """
@@ -77,17 +88,55 @@ class InfoDisplay:
             self.screen.fill((50, 50, 50))  # Gris foncé normal
         
         # Créer et afficher les textes
-        steer_text = self.font.render(f"Steer: {steer:.2f} rad", True, (0, 255, 0))
-        speed_text = self.font.render(f"Speed: {speed:.2f} m/s", True, (0, 255, 0))
+        y_offset = 20
+        line_spacing = 30
+        
+        # Informations de contrôle
+        steer_text = self.font.render(f"Direction: {steer:.2f} rad", True, (0, 255, 0))
+        speed_text = self.font.render(f"Vitesse: {speed:.2f} m/s", True, (0, 255, 0))
+        
+        # Informations de performance
+        lap_time = obs['lap_times'][0] if 'lap_times' in obs and len(obs['lap_times']) > 0 else 0.0
+        lap_count = int(obs['lap_counts'][0]) if 'lap_counts' in obs and len(obs['lap_counts']) > 0 else 0
+        
+        # Vérifier si un nouveau tour a été complété
+        if lap_count > self.current_lap_count:
+            # Sauvegarder le temps du tour précédent
+            if self.current_lap_count > 0:  # Ne pas sauvegarder le temps du premier tour incomplet
+                self.lap_times_history.append(lap_time)
+                if lap_time < self.best_lap_time:
+                    self.best_lap_time = lap_time
+            self.current_lap_count = lap_count
+        
+        # Afficher les informations de tour actuelles
+        lap_time_text = self.font.render(f"Temps tour actuel: {lap_time:.2f} s", True, (255, 255, 0))
+        lap_count_text = self.font.render(f"Tour: {lap_count}", True, (255, 255, 0))
+        
+        if self.best_lap_time < float('inf'):
+            best_time_text = self.font.render(f"Meilleur tour: {self.best_lap_time:.2f} s", True, (255, 215, 0))
         
         # Afficher warning si collision
         if is_colliding:
             warning_text = self.font.render("! COLLISION !", True, (255, 0, 0))
             self.screen.blit(warning_text, (80, 90))
         
-        # Positionner les textes (inversés)
-        self.screen.blit(steer_text, (20, 20))
-        self.screen.blit(speed_text, (20, 50))
+        # Positionner les textes principaux
+        self.screen.blit(steer_text, (20, y_offset))
+        self.screen.blit(speed_text, (20, y_offset + line_spacing))
+        self.screen.blit(lap_time_text, (20, y_offset + 2 * line_spacing))
+        self.screen.blit(lap_count_text, (20, y_offset + 3 * line_spacing))
+        if self.best_lap_time < float('inf'):
+            self.screen.blit(best_time_text, (20, y_offset + 4 * line_spacing))
+        
+        # Afficher l'historique des temps au tour
+        if self.lap_times_history:
+            history_title = self.font.render("Historique des tours:", True, (200, 200, 200))
+            self.screen.blit(history_title, (500, y_offset))
+            
+            for i, time in enumerate(self.lap_times_history):
+                color = (255, 215, 0) if time == self.best_lap_time else (200, 200, 200)
+                lap_text = self.small_font.render(f"Tour {i+1}: {time:.2f} s", True, color)
+                self.screen.blit(lap_text, (500, y_offset + 40 + i * 25))
         
         # Dessiner le scan laser s'il est disponible
         if 'scans' in obs and obs['scans'] is not None and len(obs['scans']) > 0:
@@ -117,7 +166,16 @@ def main():
     
     # Initialisation
     obs = racecar_env.reset(initial_pose)
-    controller = Teleoperation()
+    controller = SimpleAutonomousController(# Paramètres de contrôle
+                 max_speed=3.0,           # m/s
+                 max_steer=2.0,           # rad
+                 min_front_dist=0.5,      # distance minimale frontale (m)
+                 safety_margin=0.3,       # marge de sécurité (m)
+                 
+                 # Paramètres du scan
+                 front_angle=30,          # demi-angle du secteur frontal (degrés)
+                 side_angle=90)          # demi-angle des secteurs latéraux (degrés)
+                 
     display = InfoDisplay()
     
     try:
@@ -131,6 +189,7 @@ def main():
                 
             # Faire un pas de simulation
             obs, step_reward, done, info = racecar_env.step(actions)
+            print(obs)
             
             # Extraire vitesse et angle de braquage des actions
             speed = actions[0][0]  # Vitesse
