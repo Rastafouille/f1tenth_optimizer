@@ -103,27 +103,7 @@ class InfoDisplay:
         pygame.quit()
 
 def main():
-    # Paramètres du véhicule
-    params_dict = {
-        'mu': 1.0489,
-        'C_Sf': 4.718,
-        'C_Sr': 5.4562,
-        'mass': 3.463388126201571,
-        'lf': 0.15597534362552312,
-        'lr': 0.17145,
-        'h': 0.074,
-        'I': 0.04712,
-        's_min': -0.4189,
-        's_max': 0.4189,
-        'sv_min': -3.2,
-        'sv_max': 3.2,
-        'v_switch': 7.319,
-        'a_max': 9.51,
-        'v_min': -5.0,
-        'v_max': 20.0,
-        'width': 0.31,
-        'length': 0.58
-    }
+    
     
     # Création de l'environnement
     map_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'maps', 'example_map')
@@ -162,8 +142,9 @@ def main():
             # Rendu de l'environnement
             racecar_env.render(mode='human')
             
+            # En cas de collision, réinitialiser la position
             if done:
-                break
+                obs = racecar_env.reset(initial_pose)
             
     except KeyboardInterrupt:
         print("\nSimulation interrompue par l'utilisateur")
