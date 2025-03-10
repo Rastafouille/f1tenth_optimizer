@@ -248,7 +248,8 @@ def main():
     racecar_env = gym.make('f110_gym:f110-v0',
                           map=map_path,
                           map_ext='.png',
-                          num_agents=1)
+                          num_agents=1,
+                          timestep=0.01)
 
     # Position initiale
     initial_pose = np.array([[0.7, 0.0, 1.37079632679]], dtype=np.float64)

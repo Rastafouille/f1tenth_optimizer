@@ -2,18 +2,19 @@ import numpy as np
 import csv
 from datetime import datetime
 from scipy.optimize import minimize
+import os
 
 class ParameterTester:
     def __init__(self):
         # Définition des plages de paramètres avec min, max et pas
         self.parameter_definitions = {
             'max_speed': {
-                'min': 1.0,    # m/s
+                'min': 3.0,    # m/s
                 'max': 3.0,
                 'step': 0.5
             },
             'max_steer': {
-                'min': .05,    # rad
+                'min': .2,    # rad
                 'max': .2,
                 'step': 0.05
             },
@@ -67,6 +68,14 @@ class ParameterTester:
         
         # Création du fichier de résultats (sans l'heure)
         self.results_file = f"parameter_test_results_{datetime.now().strftime('%Y%m%d')}.csv"
+        
+        # Nouveaux paramètres pour la détection de convergence
+        self.score_history = []
+        self.convergence_window = 10  # Nombre de tests pour vérifier la convergence
+        self.convergence_threshold = 50  # Seuil de variation pour détecter la convergence
+        self.exploration_mode = False
+        self.exploration_count = 0
+        self.max_exploration_tests = 5  # Nombre de tests aléatoires après convergence
         
         # Charger les résultats existants si le fichier existe
         self.load_existing_results()
@@ -198,6 +207,9 @@ class ParameterTester:
                 f"{temps_tour:.2f}" if tour_complete else 'N/A',
                 f"{score:.2f}"
             ])
+        
+        # Ajouter le score à l'historique
+        self.score_history.append(score)
     
     def parameters_to_array(self, params):
         """Convertit un dictionnaire de paramètres en tableau numpy"""
@@ -303,82 +315,74 @@ class ParameterTester:
                 return True
         return False
 
-    def get_next_parameters(self):
-        """Génère le prochain jeu de paramètres à tester"""
-        max_attempts = 50  # Nombre maximum de tentatives pour trouver des paramètres uniques
-        
-        for _ in range(max_attempts):
-            if not self.tested_params:
-                print("Premier test : valeurs moyennes")
-                params = {name: np.mean(values) for name, values in self.parameter_ranges.items()}
-            else:
-                # Si on a assez de données et qu'on n'utilise pas encore Nelder-Mead
-                if len(self.tested_params) >= 10 and not self.using_nelder_mead:
-                    print("\nInitialisation de Nelder-Mead avec les meilleurs paramètres trouvés")
-                    self.initialize_nelder_mead()
-                
-                # Si on utilise Nelder-Mead
-                if self.using_nelder_mead and self.nelder_mead_result is not None:
-                    # Afficher l'état de l'optimisation
-                    print("\n--- État de l'optimisation Nelder-Mead ---")
-                    if hasattr(self.nelder_mead_result, 'nit'):
-                        print(f"Nombre d'itérations: {self.nelder_mead_result.nit}")
-                    if hasattr(self.nelder_mead_result, 'fun'):
-                        print(f"Meilleur score trouvé: {-self.nelder_mead_result.fun:.2f}")
-                    
-                    # Alterner entre exploration et exploitation
-                    if np.random.random() < 0.8:  # 80% du temps, utiliser Nelder-Mead
-                        x = self.nelder_mead_result.x
-                        # Ajouter un bruit adaptatif basé sur la performance
-                        noise_scale = 0.1 * (1.0 - min(1.0, self.best_score / 10000))
-                        noise = np.random.normal(0, noise_scale, size=len(x))
-                        x = x + noise
-                        print("Mode: Exploitation Nelder-Mead (avec bruit adaptatif)")
-                        print(f"Échelle du bruit: {noise_scale:.3f}")
-                        params = self.array_to_parameters(x)
-                    else:
-                        print("Mode: Exploration aléatoire (20% des tests)")
-                        params = self.get_random_parameters()
-                else:
-                    # Sinon, utiliser une exploration plus large
-                    if self.best_score > 0:
-                        print("\nMode: Exploration large autour des meilleurs paramètres")
-                        print(f"Score de référence: {self.best_score:.2f}")
-                        params = self.get_random_parameters_around_best()
-                    else:
-                        print("\nMode: Exploration aléatoire complète")
-                        params = self.get_random_parameters()
+    def is_converging(self):
+        """Vérifie si l'algorithme converge en analysant l'historique des scores"""
+        if len(self.score_history) < self.convergence_window:
+            return False
             
-            # Vérifier si ces paramètres ou des paramètres similaires ont déjà été testés
-            if not self.is_similar_combination(params):
-                return params
-            
-            print("Paramètres similaires déjà testés, nouvelle tentative...")
+        recent_scores = self.score_history[-self.convergence_window:]
+        score_variation = np.std(recent_scores)
+        mean_score = np.mean(recent_scores)
         
-        print("Warning: Impossible de trouver des paramètres uniques après plusieurs tentatives")
-        return self.get_random_parameters()  # Retourner des paramètres aléatoires en dernier recours
+        # On considère qu'il y a convergence si:
+        # 1. La variation est faible (écart-type < seuil)
+        # 2. Les scores sont positifs (tours complétés)
+        return score_variation < self.convergence_threshold and mean_score > 0
 
     def get_random_parameters(self):
-        """Génère des paramètres aléatoires"""
-        return {
-            name: np.random.uniform(
-                self.parameter_definitions[name]['min'],
-                self.parameter_definitions[name]['max']
-            )
-            for name in self.parameter_definitions
-        }
+        """Génère des paramètres complètement aléatoires"""
+        params = {}
+        for name, config in self.parameter_definitions.items():
+            min_val = config['min']
+            max_val = config['max']
+            # Utiliser une distribution uniforme pour l'exploration
+            params[name] = min_val + (max_val - min_val) * np.random.random()
+        return params
 
-    def get_random_parameters_around_best(self):
-        """Génère des paramètres aléatoires autour des meilleurs paramètres"""
+    def get_next_parameters(self):
+        """Retourne les prochains paramètres à tester"""
+        if self.exploration_mode:
+            # Mode exploration : générer des paramètres aléatoires
+            self.exploration_count += 1
+            if self.exploration_count >= self.max_exploration_tests:
+                self.exploration_mode = False
+                self.exploration_count = 0
+                print("Fin de la phase d'exploration, retour à l'optimisation normale")
+            else:
+                print(f"Mode exploration ({self.exploration_count}/{self.max_exploration_tests})")
+            return self.get_random_parameters()
+        
+        # Vérifier la convergence
+        if self.is_converging() and not self.exploration_mode:
+            print("Convergence détectée, passage en mode exploration")
+            self.exploration_mode = True
+            self.exploration_count = 0
+            return self.get_random_parameters()
+        
+        # Optimisation normale avec Nelder-Mead modifié
+        if not self.best_params:
+            # Premier test : paramètres au milieu des plages
+            params = {}
+            for name, config in self.parameter_definitions.items():
+                params[name] = (config['min'] + config['max']) / 2
+            return params
+        
+        # Générer de nouveaux paramètres basés sur les meilleurs résultats
         new_params = {}
-        for name, value in self.best_params.items():
-            range_min = self.parameter_definitions[name]['min']
-            range_max = self.parameter_definitions[name]['max']
-            variation = (range_max - range_min) * 0.3
-            new_value = value + np.random.uniform(-variation, variation)
-            new_params[name] = np.clip(new_value, range_min, range_max)
+        for name, config in self.parameter_definitions.items():
+            current_value = self.best_params[name]
+            step = config['step']
+            
+            # Ajout d'une petite perturbation aléatoire
+            perturbation = np.random.normal(0, step/2)
+            new_value = current_value + perturbation
+            
+            # S'assurer que la valeur reste dans les limites
+            new_value = max(config['min'], min(config['max'], new_value))
+            new_params[name] = new_value
+        
         return new_params
-    
+
     def get_total_combinations(self):
         """Calcule le nombre total de combinaisons possibles"""
         # Calculer le nombre de valeurs pour chaque paramètre
