@@ -1,0 +1,24 @@
+Rapport d'Analyse des Résultats
+==================================================
+
+Statistiques Générales:
+--------------------
+Nombre total de tests: 1547
+Meilleur score: 9480.80
+Score moyen: 3482.99
+Taux de succès: 43.6%
+Taux de collision: 14.4%
+
+Meilleurs Paramètres:
+--------------------
+max_speed: 2.990
+max_steer: 0.190
+min_front_dist: 0.340
+safety_margin: 0.390
+front_angle: 21.870
+side_angle: 34.940
+
+Temps Moyen:
+--------------------
+Temps moyen par tour: 33.48s
+Meilleur temps: -1.00s
