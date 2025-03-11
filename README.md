@@ -8,12 +8,11 @@ Ce projet implémente un système d'optimisation des paramètres pour un véhicu
 On utilise un simulateur (F1tenth_gym), un algoritme de navigation et un optimizer de paramatre
 
 ## Sommaire
-
-- [Interfaces](#Interfaces)
-- [Modes de Fonctionnement](#Modes de Fonctionnement)
-- [Algorithme de Navigation](#Algorithme de Navigation)
-- [Système d'Optimisation](#Système d'Optimisation)
-- [Installation](#Installation)
+- [Interfaces](#interfaces)
+- [Modes de Fonctionnement](#modes-de-fonctionnement)
+- [Algorithme de Navigation](#algorithme-de-navigation)
+- [Système d'Optimisation](#systeme-doptimisation)
+- [Installation](#installation)
 
 
 
