@@ -7,6 +7,13 @@
 Ce projet implémente un système d'optimisation des paramètres pour un véhicule F1TENTH utilisant l'algorithme Nelder-Mead et une exploration adaptative.
 On utilise un simulateur (F1tenth_gym), un algoritme de navigation et un optimizer de paramatre
 
+## Sommaire
+
+- [Interfaces](#Interfaces)
+- [Modes de Fonctionnement](#Modes de Fonctionnement)
+- [Algorithme de Navigation](#Algorithme de Navigation)
+- [Système d'Optimisation](#Système d'Optimisation)
+- [Installation](#Installation)
 
 
 
@@ -148,7 +155,7 @@ Les résultats sont sauvegardés dans un fichier CSV avec :
 - Temps au tour
 - Score final
 
-## Configuration de l'environnement F1TENTH Gym
+## Installation
 
 Ce guide détaille les étapes pour configurer correctement l'environnement de simulation F1TENTH Gym.
 
