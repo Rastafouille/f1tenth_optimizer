@@ -1,6 +1,8 @@
 # F1TENTH Optimization
 
 Ce projet implémente un système d'optimisation des paramètres pour un véhicule F1TENTH utilisant l'algorithme Nelder-Mead et une exploration adaptative.
+On utilise un simulateur (F1tenth_gym), un algoritme de navigation et un optimizer de paramatre
+
 
 ## Interfaces
 
@@ -76,12 +78,6 @@ Les six paramètres clés qui influencent le comportement :
 - `front_angle` : Angle de détection avant
 - `side_angle` : Angle de détection latérale
 
-## Structure du Projet
-
-- `main.py` : Script principal avec la simulation et l'interface graphique
-- `parameter_tester.py` : Système d'optimisation des paramètres
-- `navigation.py` : Contrôleur autonome du véhicule
-
 ## Système d'Optimisation
 
 ### Paramètres Optimisés
@@ -146,42 +142,17 @@ Les résultats sont sauvegardés dans un fichier CSV avec :
 - Temps au tour
 - Score final
 
-## Utilisation
-
-Pour lancer l'optimisation :
-```bash
-python main.py
-```
-
-L'optimisation peut être interrompue à tout moment avec Ctrl+C, affichant les meilleurs paramètres trouvés.
-
-## Visualisation
-
-L'interface graphique montre :
-- Scan laser en temps réel
-- Vitesse et direction actuelles
-- Temps au tour
-- Historique des temps
-- État des collisions
-
-## Notes Techniques
-
-- Intégrateur RK4 utilisé pour la simulation
-- Bruit adaptatif basé sur la performance
-- Simplexe initial personnalisé pour Nelder-Mead
-- Exploration guidée par les meilleurs résultats
-
-# Configuration de l'environnement F1TENTH Gym
+## Configuration de l'environnement F1TENTH Gym
 
 Ce guide détaille les étapes pour configurer correctement l'environnement de simulation F1TENTH Gym.
 
-## Prérequis
+### Prérequis
 
 - Windows 10 ou plus récent
 - Python 3.8 (spécifiquement cette version)
 - Git
 
-## Installation étape par étape
+### Installation étape par étape
 
 1. **Créer un environnement virtuel Python**
    ```powershell
@@ -213,7 +184,7 @@ Ce guide détaille les étapes pour configurer correctement l'environnement de s
    pip install -e . --> si marche pas
    ```
 
-## Vérification de l'installation
+### Vérification de l'installation
 
 Pour vérifier que tout fonctionne correctement :
 
@@ -223,3 +194,12 @@ Pour vérifier que tout fonctionne correctement :
    python waypoint_follow.py
    ```
    Une fenêtre devrait s'ouvrir montrant la simulation.
+
+### Utilisation
+
+Pour lancer l'optimisation :
+```bash
+python main.py
+```
+
+L'optimisation peut être interrompue à tout moment avec Ctrl+C, affichant les meilleurs paramètres trouvés.
