@@ -1,7 +1,3 @@
-
-[TOC]
-
-
 # F1TENTH Optimization
 
 Ce projet implémente un système d'optimisation des paramètres pour un véhicule F1TENTH utilisant l'algorithme Nelder-Mead et une exploration adaptative.
